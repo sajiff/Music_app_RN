@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons, AntDesign, Feather, Entypo } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
+import { Audio } from 'expo-av';
 
 import colors from '../constants/colors';
 import songs from '../model/data';
@@ -48,6 +49,17 @@ export default function MusicPlayer() {
     songSlider.current.scrollToOffset({
       offset: (SongIndex - 1) * width,
     });
+  };
+
+  const handlePlayPauseButton = async () => {
+    const playbackObj = new Audio.Sound();
+    await playbackObj.loadAsync(
+      {
+        uri: 'https://mega.nz/file/p1MRXYTa#tBSuHXWTqWmKkSLkArrqhwZ_a6s4QJ8gyBcvtudoF-g',
+      },
+      { shouldPlay: true }
+    );
+    console.log(songs[SongIndex]);
   };
 
   const renderSongs = ({ index, item }) => {
@@ -112,7 +124,7 @@ export default function MusicPlayer() {
               color={colors.colors.musicControls}
             />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => {}}>
+          <TouchableOpacity onPress={handlePlayPauseButton}>
             <Ionicons
               name="ios-pause-circle"
               size={75}
