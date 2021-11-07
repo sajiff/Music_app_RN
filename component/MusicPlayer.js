@@ -24,6 +24,10 @@ export default function MusicPlayer() {
   const songSlider = useRef(null);
 
   const [SongIndex, setSongIndex] = useState(0);
+  const [PlaybackObj, setPlaybackObj] = useState(null);
+  const [SoundObj, setSoundObj] = useState(null);
+  const [PlayBackPosition, setPlayBackPosition] = useState(null);
+  const [PlayBackDuration, setPlayBackDuration] = useState(null);
 
   useEffect(() => {
     scrollX.addListener(({ value }) => {
@@ -31,7 +35,6 @@ export default function MusicPlayer() {
       //console.log('device widht : ', width);
       const index = Math.round(value / width);
       setSongIndex(index);
-      //console.log(index);
     });
 
     return () => {
@@ -40,38 +43,128 @@ export default function MusicPlayer() {
   }, []);
 
   const skipToNext = () => {
+    console.log(SoundObj);
+    PlaybackObj?.setStatusAsync({ shouldPlay: false });
+    setSoundObj(null);
     songSlider.current.scrollToOffset({
       offset: (SongIndex + 1) * width,
     });
+    if (PlaybackObj && SongIndex + 1 !== songs.length) {
+      console.log('done');
+      PlaybackObj?.unloadAsync();
+      playNext();
+    }
   };
 
-  const skipToPrevious = () => {
-    songSlider.current.scrollToOffset({
-      offset: (SongIndex - 1) * width,
-    });
-  };
-
-  const handlePlayPauseButton = async () => {
-    const playbackObj = new Audio.Sound();
-    await playbackObj.loadAsync(
+  const playNext = async () => {
+    const status = await PlaybackObj.loadAsync(
       {
-        uri: 'https://mega.nz/file/p1MRXYTa#tBSuHXWTqWmKkSLkArrqhwZ_a6s4QJ8gyBcvtudoF-g',
+        uri: songs[SongIndex + 1].url,
       },
       { shouldPlay: true }
     );
-    console.log(songs[SongIndex]);
+    setSoundObj(status);
+    return;
+  };
+
+  const skipToPrevious = () => {
+    PlaybackObj?.setStatusAsync({ shouldPlay: false });
+    setSoundObj(null);
+    songSlider.current.scrollToOffset({
+      offset: (SongIndex - 1) * width,
+    });
+
+    console.log(SongIndex - 1);
+    if (PlaybackObj && SongIndex - 1 >= 0) {
+      PlaybackObj?.unloadAsync();
+      playPrevious();
+    }
+  };
+
+  const playPrevious = async () => {
+    const status = await PlaybackObj.loadAsync(
+      {
+        uri: songs[SongIndex - 1].url,
+      },
+      { shouldPlay: true }
+    );
+    setSoundObj(status);
+    return;
+  };
+
+  const handlePlayPauseButton = async () => {
+    //playing audio for the first time
+    if (SoundObj === null) {
+      console.log('first time');
+      const playbackObj = new Audio.Sound();
+
+      const status = await playbackObj.loadAsync(
+        {
+          uri: songs[SongIndex].url,
+        },
+        { shouldPlay: true }
+      );
+      setPlaybackObj(playbackObj);
+      setSoundObj(status);
+      playbackObj.setOnPlaybackStatusUpdate(onPlayBackStatusUpdate);
+      return;
+    }
+
+    //pause audio
+    if (SoundObj.isLoaded && SoundObj.isPlaying) {
+      console.log('pause');
+      const status = await PlaybackObj.setStatusAsync({ shouldPlay: false });
+      setSoundObj(status);
+      return;
+    }
+
+    //resume audio
+    if (SoundObj.isLoaded && !SoundObj.isPlaying) {
+      console.log('resume');
+      const status = await PlaybackObj.playAsync();
+      setSoundObj(status);
+      return;
+    }
+
+    //select another audio
+
+    //console.log(status);
+  };
+
+  const onPlayBackStatusUpdate = (playbackStatus) => {
+    if (playbackStatus.isLoaded && playbackStatus.isPlaying) {
+      setPlayBackPosition(playbackStatus.positionMillis);
+      setPlayBackDuration(playbackStatus.durationMillis);
+    }
+    if (playbackStatus.didJustFinish) {
+      setTimeout(() => {
+        console.log(SoundObj);
+        skipToNext();
+      }, 3000);
+    }
   };
 
   const renderSongs = ({ index, item }) => {
     return (
       <Animated.View
-        style={{ width: width, justifyContent: 'center', alignItems: 'center' }}
+        style={{
+          width: width,
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
       >
         <View style={styles.artworkWrapper}>
           <Image source={item.image} style={styles.artowrkImg} />
         </View>
       </Animated.View>
     );
+  };
+
+  const calculateSeekBar = () => {
+    if (PlayBackPosition !== null && PlayBackDuration !== null) {
+      return PlayBackPosition;
+    }
+    return 0;
   };
   return (
     <SafeAreaView style={styles.container}>
@@ -104,17 +197,23 @@ export default function MusicPlayer() {
         </View>
         <Slider
           style={styles.progressContainer}
-          value={10}
+          value={calculateSeekBar()}
           minimumValue={0}
-          maximumValue={100}
+          maximumValue={PlayBackDuration}
           thumbTintColor="#FFD369"
           minimumTrackTintColor="#FFD369"
           maximumTrackTintColor="#fff"
           onSlidingComplete={() => {}}
         />
         <View style={styles.progressLabelContainer}>
-          <Text style={styles.progressLabelText}>0.0</Text>
-          <Text style={styles.progressLabelText}>0.0</Text>
+          <Text style={styles.progressLabelText}>
+            {Math.floor(PlayBackPosition / 60000)}:
+            {((PlayBackPosition % 60000) / 1000).toFixed(0)}
+          </Text>
+          <Text style={styles.progressLabelText}>
+            {Math.floor(PlayBackDuration / 60000)}:
+            {((PlayBackDuration % 60000) / 1000).toFixed(0)}
+          </Text>
         </View>
         <View style={styles.musicControls}>
           <TouchableOpacity onPress={skipToPrevious}>
@@ -126,7 +225,9 @@ export default function MusicPlayer() {
           </TouchableOpacity>
           <TouchableOpacity onPress={handlePlayPauseButton}>
             <Ionicons
-              name="ios-pause-circle"
+              name={
+                SoundObj?.isPlaying ? 'ios-pause-circle' : 'ios-play-circle'
+              }
               size={75}
               color={colors.colors.musicControls}
             />
@@ -199,8 +300,8 @@ const styles = StyleSheet.create({
     width: '80%',
   },
   artworkWrapper: {
-    width: 300,
-    height: 350,
+    width: width * 0.7,
+    height: width * 0.8,
     marginBottom: 25,
     shadowColor: '#ccc',
     shadowOffset: {
@@ -229,13 +330,13 @@ const styles = StyleSheet.create({
     color: '#eeee',
   },
   progressContainer: {
-    width: 350,
+    width: width * 0.9,
     height: 40,
     marginTop: 25,
     flexDirection: 'row',
   },
   progressLabelContainer: {
-    width: 340,
+    width: width * 0.8,
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
